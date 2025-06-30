@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Request Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>HTTP Request Dashboard</h1>
+
+        <div class="form-group">
+            <label for="curlCommand">CURL Command:</label>
+            <textarea id="curlCommand"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="expectedText">Text to Search:</label>
+            <input type="text" id="expectedText">
+        </div>
+
+        <div class="form-group">
+            <label for="iterations">Iterations:</label>
+            <input type="number" id="iterations" value="50" min="1">
+        </div>
+
+        <button id="executeBtn">Execute Requests</button>
+        <button id="stopBtn">Stop Execution</button>
+        <button id="generateSnippetBtn">Generate Code Snippet</button>
+
+        <h2>Results</h2>
+        <pre id="results"></pre>
+
+        <h2>Statistics</h2>
+        <pre id="stats"></pre>
+
+        <!-- Progress Bar -->
+        <div id="progress-container" style="display:none;">
+            <div id="progress-bar"></div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#executeBtn').click(function() {
+                const curlCommand  = $('#curlCommand').val();
+                const expectedText = $('#expectedText').val();
+                const iterations   = $('#iterations').val();
+
+                // Show & reset progress bar
+                $('#progress-container').show();
+                $('#progress-bar').css('width', '0%');
+
+                // Build query string for GET
+                const params = new URLSearchParams({ curlCommand, expectedText, iterations });
+                const es = new EventSource(`/execute?${params.toString()}`);
+
+                es.onmessage = event => {
+                    const data = event.data;
+                    const progress = parseFloat(data);
+                    if (!isNaN(progress)) {
+                        $('#progress-bar').css('width', `${progress}%`);
+                    } else {
+                        const { stats, summary } = JSON.parse(data);
+                        $('#results').text(stats.join('\n'));
+                        $('#stats').text(
+                          `Total Requests: ${summary.total_requests}\n` +
+                          `Successful: ${summary.successful_requests}\n` +
+                          `Failed: ${summary.failed_requests}\n` +
+                          `Success Rate: ${summary.success_rate}`
+                        );
+                        es.close();
+                    }
+                };
+
+                es.onerror = () => {
+                    alert('Error in stream. Check console.');
+                    es.close();
+                };
+            });
+
+            $('#stopBtn').click(function() {
+                $.post('/stop_execution', function(response) {
+                    alert(response.status);
+                });
+            });
+
+            $('#generateSnippetBtn').click(function() {
+                const curlCommand  = $('#curlCommand').val();
+                const expectedText = $('#expectedText').val();
+                const iterations   = $('#iterations').val();
+
+                $.ajax({
+                    url: '/generate_snippet',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ curlCommand, expectedText, iterations }),
+                    success: function(response) {
+                        const snippetWindow = window.open('', 'Code Snippet', 'width=700,height=500');
+                        snippetWindow.document.write('<pre>' + response.snippet + '</pre>');
+                    },
+                    error: function(xhr) {
+                        alert(xhr.responseJSON.error);
+                    }
+                });
+            });
+        });
+    </script>
+
+    <style>
+        #progress-container {
+            width: 100%;
+            height: 30px;
+            background-color: #f3f3f3;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        #progress-bar {
+            height: 100%;
+            width: 0;
+            background-color: #4a6fa5;
+            border-radius: 5px;
+        }
+    </style>
+</body>
+</html>
