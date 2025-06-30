@@ -1,7 +1,4 @@
 Flask
 gunicorn
-json
-threading
-re
 requests
 urllib
