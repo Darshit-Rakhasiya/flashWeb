@@ -71,20 +71,18 @@
     <script>
         $(document).ready(function() {
     $('#executeBtn').click(function() {
+         $('#stats').text(` `);
         $('#stopBtn').prop('disabled', false);
         const curlCommand  = $('#curlCommand').val();
         const expectedText = $('#expectedText').val();
         const iterations   = $('#iterations').val();
 
-        // Show & reset progress bar
         $('#prgID').show();
         $('#progress-container').show();
         $('#progress-bar').css('width', '0%');
 
-        // Clear previous results
         $('#results').text('');
 
-        // Build query string for GET
         const params = new URLSearchParams({ curlCommand, expectedText, iterations });
         const es = new EventSource(`/execute?${params.toString()}`);
 
@@ -92,18 +90,14 @@
             const data = event.data;
             const progress = parseFloat(data);
             if (!isNaN(progress)) {
-                // Update progress bar
                 $('#progress-bar').css('width', `${progress}%`);
             } else {
-                // Assuming data contains incremental results during execution
                 const { stats, summary, iterationResult } = JSON.parse(data);
 
-                // Display current iteration result
                 if (iterationResult) {
                     $('#results').append(`<div>${iterationResult}</div>`);
                 }
 
-                // Update statistics
                 $('#stats').text(
                     `Total Requests: ${summary.total_requests}\n` +
                     `Successful: ${summary.successful_requests}\n` +
@@ -111,7 +105,6 @@
                     `Success Rate: ${summary.success_rate}`
                 );
 
-                // If completed, stop the stream
                 if (summary.total_requests === summary.successful_requests + summary.failed_requests) {
                     es.close();
                 }
@@ -152,7 +145,6 @@
         });
     });
 
-    // Modal logic
     $('#aboutBtn').click(function() {
         $('#aboutModal').show();
     });

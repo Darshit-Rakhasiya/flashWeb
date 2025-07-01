@@ -34,7 +34,7 @@ def get_response(url, headers=None, cookies=None):
         return None
     kwargs = {}
     if headers:
-        # drop conditional headers
+
         kwargs['headers'] = {k: v for k, v in headers.items()
                              if k.lower() not in ['if-modified-since', 'if-none-match']}
     if cookies:
@@ -60,7 +60,6 @@ def index():
 
 @app.route('/execute')
 def execute_requests():
-    # reset stop flag each run
     stop_event.clear()
 
     curl_command  = request.args.get('curlCommand', '')
@@ -82,7 +81,6 @@ def execute_requests():
         nonlocal success_count, failure_count
         for i in range(iterations):
             if stop_event.is_set():
-                # Stop execution early if requested
                 yield f"data: {json.dumps({'status': f'Execution stopped after {i} iterations.'})}\n\n"
                 break
 
@@ -90,21 +88,17 @@ def execute_requests():
             result = text_in_response_check(i+1, resp, expected_text)
             stats.append(result)
 
-            # Update success or failure counts
             if resp and 200 <= getattr(resp, 'status_code', 0) < 300:
                 success_count += 1
             else:
                 failure_count += 1
 
-            # Send real-time progress percentage to frontend
             yield f"data: {(i+1)/iterations*100:.2f}\n\n"
 
-            # Send real-time result for this iteration
             yield f"data: {json.dumps({'iterationResult': result})}\n\n"
 
             time.sleep(0.1)
 
-        # After all iterations, send the summary
         total = success_count + failure_count
         summary = {
             'total_requests': total,
@@ -161,5 +155,5 @@ for i in range(iterations):
     return jsonify({'snippet': snippet})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
