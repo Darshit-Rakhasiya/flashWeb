@@ -4,126 +4,170 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HTTP Request Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <h1>HTTP Request Dashboard</h1>
 
+        <!-- Input Section -->
         <div class="form-group">
             <label for="curlCommand">CURL Command:</label>
-            <textarea id="curlCommand"></textarea>
+            <textarea id="curlCommand" placeholder="Enter your CURL command here..."></textarea>
         </div>
 
         <div class="form-group">
             <label for="expectedText">Text to Search:</label>
-            <input type="text" id="expectedText">
+            <input type="text" id="expectedText" placeholder="Enter expected text to search for...">
         </div>
 
         <div class="form-group">
             <label for="iterations">Iterations:</label>
-            <input type="number" id="iterations" value="50" min="1">
+            <input type="number" id="iterations" value="50" min="1" placeholder="Number of iterations">
+        </div>
+        <h4 id="prgID">Progress Bar:</h4>
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+            </div>
+        <div class="button-group">
+            <button id="executeBtn"><i class="fas fa-play"></i> Execute Requests</button>
+            <button id="stopBtn" disabled><i class="fas fa-stop"></i> Stop Execution</button>
+            <button id="generateSnippetBtn"><i class="fas fa-code"></i> Generate Code Snippet</button>
+            <button id="aboutBtn"><i class="fas fa-info-circle"></i> About</button>
         </div>
 
-        <button id="executeBtn">Execute Requests</button>
-        <button id="stopBtn">Stop Execution</button>
-        <button id="generateSnippetBtn">Generate Code Snippet</button>
+        <!-- Results Section -->
+        <div class="results-section">
+            <h2>Results</h2>
+            <pre id="results"></pre>
 
-        <h2>Results</h2>
-        <pre id="results"></pre>
+            <h2>Statistics</h2>
+            <pre id="stats"></pre>
 
-        <h2>Statistics</h2>
-        <pre id="stats"></pre>
 
-        <!-- Progress Bar -->
-        <div id="progress-container" style="display:none;">
-            <div id="progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" id="closeModal">&times;</span>
+            <h2>About - HTTP Request Dashboard</h2>
+            <p>This tool is designed for testing HTTP endpoints by executing repeated cURL commands and verifying response content.</p>
+            <p><strong>Features:</strong></p>
+            <ul>
+                <li>Execute cURL commands multiple times</li>
+                <li>Verify response content</li>
+                <li>Generate Python code snippets</li>
+                <li>View execution statistics</li>
+            </ul>
+            <p>Developed by Darshit Rakhasiya</p>
+            <button onclick="document.getElementById('aboutModal').style.display='none'">Close</button>
         </div>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function() {
-            $('#executeBtn').click(function() {
-                const curlCommand  = $('#curlCommand').val();
-                const expectedText = $('#expectedText').val();
-                const iterations   = $('#iterations').val();
+    $('#executeBtn').click(function() {
+        $('#stopBtn').prop('disabled', false);
+        const curlCommand  = $('#curlCommand').val();
+        const expectedText = $('#expectedText').val();
+        const iterations   = $('#iterations').val();
 
-                // Show & reset progress bar
-                $('#progress-container').show();
-                $('#progress-bar').css('width', '0%');
+        // Show & reset progress bar
+        $('#prgID').show();
+        $('#progress-container').show();
+        $('#progress-bar').css('width', '0%');
 
-                // Build query string for GET
-                const params = new URLSearchParams({ curlCommand, expectedText, iterations });
-                const es = new EventSource(`/execute?${params.toString()}`);
+        // Clear previous results
+        $('#results').text('');
 
-                es.onmessage = event => {
-                    const data = event.data;
-                    const progress = parseFloat(data);
-                    if (!isNaN(progress)) {
-                        $('#progress-bar').css('width', `${progress}%`);
-                    } else {
-                        const { stats, summary } = JSON.parse(data);
-                        $('#results').text(stats.join('\n'));
-                        $('#stats').text(
-                          `Total Requests: ${summary.total_requests}\n` +
-                          `Successful: ${summary.successful_requests}\n` +
-                          `Failed: ${summary.failed_requests}\n` +
-                          `Success Rate: ${summary.success_rate}`
-                        );
-                        es.close();
-                    }
-                };
+        // Build query string for GET
+        const params = new URLSearchParams({ curlCommand, expectedText, iterations });
+        const es = new EventSource(`/execute?${params.toString()}`);
 
-                es.onerror = () => {
-                    alert('Error in stream. Check console.');
+        es.onmessage = event => {
+            const data = event.data;
+            const progress = parseFloat(data);
+            if (!isNaN(progress)) {
+                // Update progress bar
+                $('#progress-bar').css('width', `${progress}%`);
+            } else {
+                // Assuming data contains incremental results during execution
+                const { stats, summary, iterationResult } = JSON.parse(data);
+
+                // Display current iteration result
+                if (iterationResult) {
+                    $('#results').append(`<div>${iterationResult}</div>`);
+                }
+
+                // Update statistics
+                $('#stats').text(
+                    `Total Requests: ${summary.total_requests}\n` +
+                    `Successful: ${summary.successful_requests}\n` +
+                    `Failed: ${summary.failed_requests}\n` +
+                    `Success Rate: ${summary.success_rate}`
+                );
+
+                // If completed, stop the stream
+                if (summary.total_requests === summary.successful_requests + summary.failed_requests) {
                     es.close();
-                };
-            });
+                }
+            }
+        };
 
-            $('#stopBtn').click(function() {
-                $.post('/stop_execution', function(response) {
-                    alert(response.status);
-                });
-            });
+        es.onerror = () => {
+            alert('Error in stream. Check console.');
+            es.close();
+        };
+    });
 
-            $('#generateSnippetBtn').click(function() {
-                const curlCommand  = $('#curlCommand').val();
-                const expectedText = $('#expectedText').val();
-                const iterations   = $('#iterations').val();
-
-                $.ajax({
-                    url: '/generate_snippet',
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ curlCommand, expectedText, iterations }),
-                    success: function(response) {
-                        const snippetWindow = window.open('', 'Code Snippet', 'width=700,height=500');
-                        snippetWindow.document.write('<pre>' + response.snippet + '</pre>');
-                    },
-                    error: function(xhr) {
-                        alert(xhr.responseJSON.error);
-                    }
-                });
-            });
+    $('#stopBtn').click(function() {
+        $.post('/stop_execution', function(response) {
+            alert(response.status);
+            $('#stopBtn').prop('disabled', true);
         });
+    });
+
+    $('#generateSnippetBtn').click(function() {
+        const curlCommand  = $('#curlCommand').val();
+        const expectedText = $('#expectedText').val();
+        const iterations   = $('#iterations').val();
+
+
+        $.ajax({
+            url: '/generate_snippet',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ curlCommand, expectedText, iterations }),
+            success: function(response) {
+                const snippetWindow = window.open('', 'Code Snippet', 'width=700,height=500');
+                snippetWindow.document.write('<pre>' + response.snippet + '</pre>');
+            },
+            error: function(xhr) {
+                alert(xhr.responseJSON.error);
+            }
+        });
+    });
+
+    // Modal logic
+    $('#aboutBtn').click(function() {
+        $('#aboutModal').show();
+    });
+
+    $('#closeModal').click(function() {
+        $('#aboutModal').hide();
+    });
+
+    $(window).click(function(event) {
+        if (event.target == document.getElementById('aboutModal')) {
+            $('#aboutModal').hide();
+        }
+    });
+});
+
     </script>
-
-    <style>
-        #progress-container {
-            width: 100%;
-            height: 30px;
-            background-color: #f3f3f3;
-            border-radius: 5px;
-            margin-top: 20px;
-        }
-
-        #progress-bar {
-            height: 100%;
-            width: 0;
-            background-color: #4a6fa5;
-            border-radius: 5px;
-        }
-    </style>
 </body>
 </html>

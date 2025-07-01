@@ -58,7 +58,6 @@ def text_in_response_check(i, response, expect_text):
 def index():
     return render_template('index.html')
 
-
 @app.route('/execute')
 def execute_requests():
     # reset stop flag each run
@@ -83,6 +82,7 @@ def execute_requests():
         nonlocal success_count, failure_count
         for i in range(iterations):
             if stop_event.is_set():
+                # Stop execution early if requested
                 yield f"data: {json.dumps({'status': f'Execution stopped after {i} iterations.'})}\n\n"
                 break
 
@@ -90,21 +90,29 @@ def execute_requests():
             result = text_in_response_check(i+1, resp, expected_text)
             stats.append(result)
 
+            # Update success or failure counts
             if resp and 200 <= getattr(resp, 'status_code', 0) < 300:
                 success_count += 1
             else:
                 failure_count += 1
 
+            # Send real-time progress percentage to frontend
             yield f"data: {(i+1)/iterations*100:.2f}\n\n"
+
+            # Send real-time result for this iteration
+            yield f"data: {json.dumps({'iterationResult': result})}\n\n"
+
             time.sleep(0.1)
 
+        # After all iterations, send the summary
         total = success_count + failure_count
         summary = {
             'total_requests': total,
             'successful_requests': success_count,
             'failed_requests': failure_count,
-            'success_rate': f"{(success_count/total*100) if total else 0:.2f}%"
+            'success_rate': f"{(success_count / total * 100) if total else 0:.2f}%"
         }
+
         yield "data: 100.00\n\n"
         yield f"data: {json.dumps({'stats': stats, 'summary': summary})}\n\n"
 
@@ -119,6 +127,7 @@ def stop_execution():
 
 @app.route('/generate_snippet', methods=['POST'])
 def generate_snippet():
+
     data = request.json or {}
     curl_command  = data.get('curlCommand', '')
     expected_text = data.get('expectedText', '')
